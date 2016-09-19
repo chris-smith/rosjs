@@ -14,7 +14,14 @@ function packageWalk(directory, symlinks, findMessages) {
   return walker(directory)
   .filterDir(function(dir, stat) {
     // Exclude any subdirectory to an excluded directory
-    return !noSubDirs.has(dir) || !stopped;
+    const ignoreFile = path.join(dir, 'CATKIN_IGNORE');
+    try {
+      fs.statSync(ignoreFile);
+    }
+    catch (err) {
+      return !noSubDirs.has(dir) || !stopped;
+    }
+    return false;
   })
   .on('file', function(file, stat) {
     var shortname = path.basename(file);
