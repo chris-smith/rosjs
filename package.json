@@ -28,8 +28,7 @@
     "bunyan": "1.8.1",
     "md5": "2.1.0",
     "moment": "2.12.0",
-    "portscanner": "1.0.0",
-    "ros_msg_utils": "RethinkRobotics-opensource/ros_msg_utils#v0.1.0",
+    "ros_msg_utils": "RethinkRobotics-opensource/ros_msg_utils#v1.0.0",
     "walker": "1.0.7",
     "xmlrpc": "chfritz/node-xmlrpc"
   }

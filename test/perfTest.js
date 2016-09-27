@@ -9,6 +9,9 @@ const rosnodejs = require('../index.js');
 const TfStamped = rosnodejs.require('geometry_msgs').msg.TransformStamped;
 const TfMessage = rosnodejs.require('tf2_msgs').msg.TFMessage;
 const Image = rosnodejs.require('sensor_msgs').msg.Image;
+const Header = rosnodejs.require('std_msgs').msg.Header;
+
+const header = new Header({seq: 100, stamp: {secs: 20, nsecs: 100010}, frame_id: 'test_cam'});
 
 function getSeconds(hrTime) {
   return hrTime[0] + hrTime[1] / 1e9;
@@ -45,9 +48,9 @@ for (let i = 0; i < NUM_CYCLES; ++i ) {
     height: height,
     encoding: 'bgr8',
     step: step,
-    data: new Uint8Array(new Buffer(step * height))
+    data: Buffer.allocUnsafe(step * height),
+    header
   });
-  image.header.frame_id = 'test_cam';
 }
 console.timeEnd('Create Image');
 
@@ -87,6 +90,9 @@ for (let i = 0; i < NUM_CYCLES; ++i) {
 deltaT = process.hrtime(hrTime);
 console.timeEnd('Deserialize');
 console.log(`Deserialized BW: ${getBandwidth(bytesPerCycle, deltaT)}MB`);
+
+// verify equality!
+expect(deserialized).to.deep.equal(image);
 
 const NUM_TFS = 1000;
 
@@ -143,3 +149,6 @@ for (let i = 0; i < NUM_CYCLES; ++i) {
 deltaT = process.hrtime(hrTime);
 console.timeEnd('Deserialize');
 console.log(`Deserialized BW: ${getBandwidth(bytesPerCycle, deltaT)}MB`);
+
+// verify equality!
+expect(deserialized).to.deep.equal(tfMessage);

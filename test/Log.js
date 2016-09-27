@@ -6,6 +6,8 @@ const bunyan = require('bunyan');
 const xmlrpc = require('xmlrpc');
 const rosnodejs = require('../index.js');
 
+const MASTER_PORT = 11234;
+
 /** setup pipe to stdout **/
 class OutputCapture {
   constructor() {
@@ -47,7 +49,7 @@ describe('Logging', () => {
   });
 
   after(()=> {
-    rosnodejs.log.setLevel('info')
+    rosnodejs.log.setLevel('fatal')
   });
 
   it('Levels', () => {
@@ -281,7 +283,7 @@ describe('Logging', () => {
   describe('Rosout', () => {
     let masterStub;
     before((done) => {
-      masterStub = xmlrpc.createServer({host: 'localhost', port: 11311}, () => { done(); });
+      masterStub = xmlrpc.createServer({host: 'localhost', port: MASTER_PORT}, () => { done(); });
     });
 
     after((done) => {
@@ -293,7 +295,7 @@ describe('Logging', () => {
       let subInfo = null;
 
       masterStub.on('getUri', (err, params, callback) => {
-        const resp = [ 1, '', 'localhost:11311/' ];
+        const resp = [ 1, '', `localhost:${MASTER_PORT}/` ];
         callback(null, resp);
       });
 
@@ -346,7 +348,8 @@ describe('Logging', () => {
       });
 
       rosnodejs.log.setLevel('info');
-      return rosnodejs.initNode('/testNode', {logging: {testing: true}});
+      return rosnodejs.initNode('/testNode', {logging: {testing: true},
+                                rosMasterUri: `http://localhost:${MASTER_PORT}`});
     });
 
     afterEach(() => {
@@ -362,6 +365,9 @@ describe('Logging', () => {
     });
 
     it('Check Publishing', (done) => {
+      rosnodejs.log.setLevel('fatal');
+      const testLogger = rosnodejs.log.getLogger('testLogger');
+      testLogger.setLevel('info');
       const nh = rosnodejs.nh;
       const message = 'This is my message';
       let intervalId = null;
@@ -379,7 +385,7 @@ describe('Logging', () => {
       const sub = nh.subscribe('/rosout', 'rosgraph_msgs/Log', rosoutCallback);
 
       intervalId = setInterval(() => {
-        rosnodejs.log.info(message);
+        testLogger.info(message);
       }, 50);
     });
   });

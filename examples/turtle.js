@@ -6,7 +6,7 @@
 
 'use strict';
 
-let rosnodejs = require('./index.js');
+let rosnodejs = require('../index.js');
 const ActionClient = require('./lib/ActionClient.js');
 
 rosnodejs.initNode('/my_node', {

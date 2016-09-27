@@ -245,6 +245,21 @@ let TcprosUtils = {
     return null;
   },
 
+  validateServiceClientHeader(header, service, md5sum) {
+    if (!header.hasOwnProperty('service')) {
+      return 'Connection header missing expected field [service]';
+    }
+    else if (!header.hasOwnProperty('md5sum')) {
+      return 'Connection header missing expected field [md5sum]';
+    }
+    else if (header.service !== service) {
+      return 'Got incorrect service [' + header.service + '] expected [' + service + ']';
+    }
+    else if (header.md5sum !== md5sum && header.md5sum !== '*') {
+      return 'Got incorrect md5sum [' + header.md5sum + '] expected [' + md5sum + ']';
+    }
+  },
+
   serializeMessage(MessageClass, message, prependMessageLength=true) {
     const msgSize = MessageClass.getMessageSize(message);
     let msgBuffer;
@@ -302,6 +317,10 @@ let TcprosUtils = {
 
   deserializeString(buffer) {
     return base_deserializers.string(buffer, [0]);
+  },
+
+  createTcpRosError(str) {
+    return this.serializeString(`{errorPrefix}${str}`);
   }
 };
 

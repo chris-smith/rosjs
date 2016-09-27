@@ -90,7 +90,9 @@ function writeRequires(w, spec, isSrv, previousPackages=null, previousDeps=null)
     w.write('"use strict";');
     w.newline();
     w.write('const _serializer = _ros_msg_utils.Serialize;');
+    w.write('const _arraySerializer = _serializer.Array;');
     w.write('const _deserializer = _ros_msg_utils.Deserialize;');
+    w.write('const _arrayDeserializer = _deserializer.Array');
     w.write('const _finder = _ros_msg_utils.Find;');
     previousPackages = new Set();
   }
@@ -170,7 +172,7 @@ function getDefaultValue(field, packageName) {
 }
 
 function writeMsgConstructorField(w, spec, field) {
-  w.write('if (initObj && initObj.hasOwnProperty(\'%s\')) {', field.name).indent();
+  w.write('if (initObj.hasOwnProperty(\'%s\')) {', field.name).indent();
   w.write('this.%s = initObj.%s;', field.name, field.name).dedent();
   w.write('}');
   w.write('else {').indent();
@@ -182,12 +184,21 @@ function writeMsgConstructorField(w, spec, field) {
 function writeClass(w, spec) {
   w.write('class %s {', spec.messageName);
   w.indent();
-  w.write('constructor(initObj) {');
-  w.indent();
+  w.write('constructor(initObj={}) {');
+  w.indent('if (initObj === null) {')
+    .indent('// initObj === null is a special case for deserialization where we don\'t initialize fields');
+  spec.fields.forEach((field) => {
+    w.write('this.%s = null;', field.name);
+  });
+  w.dedent('}')
+    .write('else {')
+    .indent('// check for this message\'s fields by key name - otherwise assign default values');
   spec.fields.forEach((field) => {
     writeMsgConstructorField(w, spec, field);
   });
-  w.dedent().write('}').newline();
+  w.dedent('}')
+    .dedent('}')
+    .newline();
 }
 
 function writeSerializeLength(w, name) {
@@ -206,7 +217,7 @@ function writeSerializeLengthCheck(w, field) {
 
 function writeSerializeBuiltinField(w, f) {
   if (f.isArray) {
-    w.write(`bufferOffset = _serializer.${f.baseType}(obj.${f.name}, buffer, bufferOffset, true);`);
+    w.write(`bufferOffset = _arraySerializer.${f.baseType}(obj.${f.name}, buffer, bufferOffset, ${f.arrayLen});`);
   }
   else {
     w.write(`bufferOffset = _serializer.${f.baseType}(obj.${f.name}, buffer, bufferOffset);`);
@@ -218,6 +229,9 @@ function writeSerializeMessageField(w, f, thisPackage) {
   let msgName = fieldsUtil.getMessageNameFromMessageType(f.baseType);
   let samePackage = (fieldPackage === thisPackage);
   if (f.isArray) {
+    if (!f.arrayLen) {
+      writeSerializeLength(w, f.name);
+    }
     w.write(`obj.${f.name}.forEach((val) => {`)
       .indent();
     if (samePackage) {
@@ -241,15 +255,12 @@ function writeSerializeMessageField(w, f, thisPackage) {
 
 function writeSerializeField(w, field, packageName) {
   if (field.isArray) {
-    if (!field.arrayLen) {
-      writeSerializeLength(w, field.name);
-    }
-    else {
+    if (field.arrayLen) {
       writeSerializeLengthCheck(w, field);
     }
     w.newline();
   }
-  w.write('// Serialize message field [%s]', field.name).newline();
+  w.write('// Serialize message field [%s]', field.name);
   if (field.isBuiltin) {
     writeSerializeBuiltinField(w, field);
   }
@@ -284,9 +295,14 @@ function writeDeserializeMessageField(w, field, thisPackage) {
   if (field.isArray) {
     // only create a new array if it has a non-constant length
     if (!field.arrayLen) {
-      w.write(`data.${field.name} = new Array(len);`);
+      writeDeserializeLength(w, field.name);
     }
-    w.write('for (let i = 0; i < len; ++i) {')
+    else {
+      w.write(`len = ${field.arrayLen};`);
+    }
+
+    w.write(`data.${field.name} = new Array(len);`)
+     .write('for (let i = 0; i < len; ++i) {')
       .indent();
     if (samePackage) {
       w.write(`data.${field.name}[i] = ${msgName}.deserialize(buffer, bufferOffset);`);
@@ -308,10 +324,7 @@ function writeDeserializeMessageField(w, field, thisPackage) {
 
 function writeDeserializeBuiltinField(w, field) {
   if (field.isArray) {
-    if (!field.arrayLen) {
-      w.write(`data.${field.name} = new Array(len);`);
-    }
-    w.write(`_deserializer.${field.baseType}(buffer, bufferOffset, data.${field.name});`);
+    w.write(`data.${field.name} = _arrayDeserializer.${field.baseType}(buffer, bufferOffset, ${field.arrayLen});`);
   }
   else {
     w.write(`data.${field.name} = _deserializer.${field.baseType}(buffer, bufferOffset);`);
@@ -319,15 +332,7 @@ function writeDeserializeBuiltinField(w, field) {
 }
 
 function writeDeserializeField(w, field, packageName) {
-  if (field.isArray) {
-    if (!field.arrayLen) {
-      writeDeserializeLength(w, field.name);
-    }
-    else {
-      w.write(`len = ${field.arrayLen};`);
-    }
-  }
-  w.write(`// Deserialize message field [${field.name}]`).newline();
+  w.write(`// Deserialize message field [${field.name}]`);
   if (field.isBuiltin) {
     writeDeserializeBuiltinField(w, field);
   }
@@ -340,7 +345,7 @@ function writeDeserializeField(w, field, packageName) {
 function writeDeserialize(w, spec) {
   w.write('static deserialize(buffer, bufferOffset=[0]) {')
     .indent('// Deserializes a message object of type %s', spec.messageName)
-    .write('let data = new %s();', spec.messageName)
+    .write('let data = new %s(null);', spec.messageName)
     .write('let len;');
   spec.fields.forEach((field) => {
     writeDeserializeField(w, field, spec.packageName);
@@ -555,7 +560,8 @@ function writeServiceEnd(w, spec) {
   w.write('module.exports = {')
     .indent(`Request: ${spec.request.messageName},`)
     .write(`Response: ${spec.response.messageName},`)
-    .write(`md5sum() { return '${spec.getMd5sum()}'; }`)
+    .write(`md5sum() { return '${spec.getMd5sum()}'; },`)
+    .write(`datatype() { return '${spec.getFullMessageName()}'; }`)
     .dedent('};')
     .newline();
 }

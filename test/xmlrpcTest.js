@@ -1,10 +1,13 @@
 'use strict'
 
+const net = require('net');
 const chai = require('chai');
 const expect = chai.expect;
 const rosnodejs = require('../index.js');
 const xmlrpc = require('xmlrpc');
 const netUtils = require('../utils/network_utils.js');
+
+const MASTER_PORT = 11234;
 
 describe('Protocol Test', () => {
   // NOTE: make sure a roscore is not running (or something else at this address)
@@ -14,7 +17,7 @@ describe('Protocol Test', () => {
   const nodeName = '/testNode';
 
   before((done) => {
-    masterStub = xmlrpc.createServer({host: 'localhost', port: 11311}, () => { done(); });
+    masterStub = xmlrpc.createServer({host: 'localhost', port: MASTER_PORT}, () => { done(); });
   });
 
   after((done) => {
@@ -25,11 +28,11 @@ describe('Protocol Test', () => {
 
     beforeEach(() => {
       masterStub.on('getUri', (err, params, callback) => {
-        const resp = [ 1, '', 'localhost:11311/' ]
+        const resp = [ 1, '', `localhost:${MASTER_PORT}/` ];
         callback(null, resp);
       });
 
-      return rosnodejs.initNode(nodeName);
+      return rosnodejs.initNode(nodeName, {rosMasterUri: `http://localhost:MASTER_PORT`});
     });
 
     afterEach(() => {
@@ -193,11 +196,11 @@ describe('Protocol Test', () => {
 
         const resp = [ 1, 'registered!', [] ];
         callback(null, resp);
-        done();
       });
 
       const nh = rosnodejs.nh;
       const serv = nh.advertiseService(service, srvType, (req, resp) => {});
+      serv.on('registered', done);
     });
 
     it('unregisterService', (done) => {
@@ -391,4 +394,144 @@ describe('Protocol Test', () => {
       pub.on('connection', () => { pub.publish({data: 1}); });
     });
   });
+
+  describe('Service', () => {
+    const service = '/test_service';
+    const srvType = 'std_srvs/Empty';
+
+    beforeEach(() => {
+      let serviceInfo = null;
+
+      masterStub.on('getUri', (err, params, callback) => {
+        const resp = [1, '', 'localhost:11311/'];
+        callback(null, resp);
+      });
+
+      masterStub.on('registerService', (err, params, callback) => {
+        serviceInfo = params[2];
+
+        const resp = [1, 'You did it!', []];
+        callback(null, resp);
+      });
+
+      masterStub.on('unregisterService', (err, params, callback) => {
+        const resp = [1, 'You did it!', subInfo ? 1 : 0];
+        callback(null, resp);
+        serviceInfo = null;
+      });
+
+      masterStub.on('lookupService', (err, params, callback) => {
+        if (serviceInfo) {
+          const resp = [1, "you did it", serviceInfo];
+          callback(null, resp);
+        }
+        else {
+          callback(new Error("Missing!"), null);
+        }
+      });
+
+      return rosnodejs.initNode(nodeName);
+    });
+
+    afterEach(() => {
+      const nh = rosnodejs.nh;
+
+      // clear out any service, subs, pubs
+      nh._node._services = {};
+      nh._node._subscribers = {};
+      nh._node._publishers = {};
+
+      // remove any master api handlers we set up
+      masterStub.removeAllListeners();
+    });
+
+    it('Call and Response', (done) => {
+      const nh = rosnodejs.nh;
+      const serv = nh.advertiseService(service, srvType, (req, resp) => {
+        return true;
+      });
+
+      const client = nh.serviceClient(service, srvType);
+      nh.waitForService(service)
+      .then(() => {
+        return client.call({});
+      })
+      .then(() => {
+        done();
+      })
+      .catch((err) => {
+        throw err;
+      })
+    });
+
+    it('Service Failure', (done) => {
+      const nh = rosnodejs.nh;
+      const serv = nh.advertiseService(service, srvType, (req, resp) => {
+        return false;
+      });
+
+      const client = nh.serviceClient(service, srvType);
+      nh.waitForService(service)
+      .then(() => {
+        return client.call({});
+      })
+      .then(() => {
+        console.error('Service call succeeded when it shouldn\'t have');
+      })
+      .catch((err) => {
+        if (err.code === 'E_ROSSERVICEFAILED') {
+          done();
+        }
+        else {
+          console.error('Service call failed with unexpected error');
+        }
+      });
+    });
+
+    it('Service Unregistered During Call', (done) => {
+      // simulate a service disconnecting between the lookupService call to ROS Master
+      // and the connection to the service node's TCPROS server
+
+      // cache a reference to net.connect - we'll replace it
+      const NET_CONNECT_FUNC = net.connect;
+
+      const nh = rosnodejs.nh;
+      const serv = nh.advertiseService(service, srvType, (req, resp) => {
+        return true;
+      });
+
+      const client = nh.serviceClient(service, srvType);
+      nh.waitForService(service)
+      .then(() => {
+
+        // we've verified that the service exists - replace the net.connect call (used to initiate the TCPROS
+        // connection) with a bogus one that throws an error
+        net.connect = (info) => {
+          const sock = new net.Socket();
+          process.nextTick(() => {
+            const error = new Error(`connect ECONNREFUSED ${info.host}:${info.port}`);
+            error.code = 'ECONNREFUSED';
+            error.errno = 'ECONNREFUSED';
+            error.address = info.host;
+            error.port = info.port;
+
+            // just to make sure there isn't some other error that comes through - should be unnecessary
+            error.rosnodejstesting = true;
+            sock.emit('error', error);
+          });
+          return sock;
+        };
+
+        return client.call({});
+      })
+      .catch((err) => {
+        if (err.code === 'ECONNREFUSED' && err.rosnodejstesting) {
+          // nice! restore net.connect and close up shop
+          net.connect = NET_CONNECT_FUNC;
+          done();
+        }
+      })
+    });
+  });
 });
+

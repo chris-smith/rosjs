@@ -31,8 +31,6 @@ const NodeHandle = require('./lib/NodeHandle.js');
 const Logging = require('./lib/Logging.js');
 const MsgLoader = require('./utils/messageGeneration/MessageLoader.js');
 
-msgUtils.findMessageFiles();
-
 // these will be modules, they depend on logger which isn't initialized yet
 // though so they'll be required later (in initNode)
 // let RosNode = null;
@@ -130,14 +128,6 @@ let Rosnodejs = {
     let rosMasterUri = process.env.ROS_MASTER_URI;
     if (options.rosMasterUri) {
       rosMasterUri = options.rosMasterUri;
-    }
-
-    if (options.useRosEnvVars) {
-      netUtils.useRosEnvironmentVariables();
-    }
-
-    if (options.portRange) {
-      netUtils.setPortRange(options.portRange);
     }
 
     Logging.initializeNodeLogger(nodeName, options.logging);

@@ -1,10 +1,10 @@
 'use strict';
 
-let rosnodejs = require('./index.js');
+let rosnodejs = require('../index.js');
 const std_msgs = rosnodejs.require('std_msgs').msg;
 const SetBool = rosnodejs.require('std_srvs').srv.SetBool;
 
-rosnodejs.initNode('/test_node')
+rosnodejs.initNode('/test_node', {rosMasterUri: 'http://021606cp00086:11311', logging: {level: 'debug', testing: false}})
 .then((rosNode) => {
   // EXP 1) Service Server
   let service = rosNode.advertiseService('/set_bool', SetBool,

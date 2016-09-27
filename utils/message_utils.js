@@ -17,11 +17,12 @@
 
 'use strict';
 
-let fs = require('fs');
-let path = require('path');
-let utils = require('util');
-let loggingManager = require('../lib/Logging.js');
+const fs = require('fs');
+const path = require('path');
+const utils = require('util');
+const loggingManager = require('../lib/Logging.js');
 const messages = require('./messageGeneration/messages.js');
+const ros_msg_utils = require('ros_msg_utils');
 
 // *grumble grumble* this is unfortunate
 // Our ros messages are going to be loaded from all over the place
@@ -29,17 +30,9 @@ const messages = require('./messageGeneration/messages.js');
 // they'll be able to find ros_msg_utils without forcing people to
 // add ros_msg_utils to their node_path or installing it globally
 // or installing it separately for every message package
-global._ros_msg_utils = require('ros_msg_utils');
-
-// When sourcing your workspace, CMAKE_PREFIX_PATH is AUTOMATICALLY
-// prepended with the devel directory of your workspace. Workspace
-// chaining works by continuing this path prepending.
-let cmakePath = process.env.CMAKE_PREFIX_PATH;
-let cmakePaths = cmakePath.split(':');
-let jsMsgPath = path.join('share', 'gennodejs', 'ros');
+global._ros_msg_utils = ros_msg_utils;
 
 let messagePackageMap = {};
-let messagePackagePathMap = {};
 
 //-----------------------------------------------------------------------
 // Utilities for loading, finding handlers for
@@ -98,27 +91,7 @@ function copyFile(from, to, replaceCallback) {
 
 let MessageUtils = {
   getTopLevelMessageDirectory() {
-    return path.join(cmakePaths[0], jsMsgPath);
-  },
-
-  findMessageFiles() {
-    if (Object.keys(messagePackagePathMap).length > 0) {
-      return;
-    }
-    cmakePaths.forEach((cmakePath) => {
-      let path_ = path.join(cmakePath, jsMsgPath);
-      if (fs.existsSync(path_)) {
-        let msgPackages = fs.readdirSync(path_);
-        msgPackages.forEach((msgPackage) => {
-          // If the message package has been found in a previous workspace,
-          // don't overwrite it now. This is critical to enabling ws overlays.
-          if (!messagePackagePathMap.hasOwnProperty(msgPackage)) {
-            let indexPath = path.join(path_, msgPackage, '_index.js');
-            messagePackagePathMap[msgPackage] = indexPath;
-          }
-        });
-      }
-    });
+    return path.join(ros_msg_utils.CMAKE_PATHS[0], ros_msg_utils.MESSAGE_PATH);
   },
 
   flatten(outputDir) {
@@ -197,15 +170,11 @@ let MessageUtils = {
   },
 
   loadMessagePackage(msgPackage) {
-    const indexPath = messagePackagePathMap[msgPackage];
-    if (indexPath === undefined) {
-      throw new Error('Unable to find message package ' + msgPackage);
-    }
     try {
-      messagePackageMap[msgPackage] = require(indexPath);
+      messagePackageMap[msgPackage] = ros_msg_utils.Find(msgPackage);
     }
     catch (err) {
-      throw new Error('Unable to include message package ' + msgPackage + ' - ' + err);
+      throw new Error(`Unable to include message package ${msgPackage} - ${err}`);
     }
   },
 
