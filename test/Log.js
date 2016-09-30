@@ -49,7 +49,7 @@ describe('Logging', () => {
   });
 
   after(()=> {
-    rosnodejs.log.setLevel('fatal')
+    rosnodejs.reset();
   });
 
   it('Levels', () => {
@@ -283,6 +283,7 @@ describe('Logging', () => {
   describe('Rosout', () => {
     let masterStub;
     before((done) => {
+      rosnodejs.reset();
       masterStub = xmlrpc.createServer({host: 'localhost', port: MASTER_PORT}, () => { done(); });
     });
 
@@ -347,8 +348,8 @@ describe('Logging', () => {
         callback(null, resp);
       });
 
-      rosnodejs.log.setLevel('info');
-      return rosnodejs.initNode('/testNode', {logging: {testing: true},
+      // rosnodejs.log.setLevel('info');
+      return rosnodejs.initNode('/testNode', {logging: {waitOnRosOut: false, level: 'info'},
                                 rosMasterUri: `http://localhost:${MASTER_PORT}`});
     });
 
@@ -373,6 +374,7 @@ describe('Logging', () => {
       let intervalId = null;
 
       const rosoutCallback = (msg) => {
+        console.log('ros out %j', msg);
         expect(msg.msg).to.have.string(message);
         if (intervalId !== null) {
           nh.unsubscribe('/rosout');

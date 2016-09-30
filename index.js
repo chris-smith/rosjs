@@ -145,6 +145,10 @@ let Rosnodejs = {
       });
   },
 
+  reset() {
+    rosNode = null;
+  },
+
   loadPackage(packageName, outputDir=null, verbose=false) {
     const msgLoader = new MsgLoader(verbose);
     if (!outputDir) {

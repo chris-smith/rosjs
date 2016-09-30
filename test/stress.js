@@ -349,7 +349,7 @@ describe('ClientShutdown', function() {
       else {
         stopService();
       }
-    }, 10);
+    }, 7);
 
     setTimeout(done, 8000);
   });

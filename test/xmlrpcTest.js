@@ -4,10 +4,17 @@ const net = require('net');
 const chai = require('chai');
 const expect = chai.expect;
 const rosnodejs = require('../index.js');
+const Subscriber = require('../lib/Subscriber.js');
 const xmlrpc = require('xmlrpc');
 const netUtils = require('../utils/network_utils.js');
 
 const MASTER_PORT = 11234;
+
+// helper function to throw errors outside a promise scope
+// so they actually trigger failures
+function throwNext(msg) {
+  process.nextTick(() => { throw new Error(msg)});
+}
 
 describe('Protocol Test', () => {
   // NOTE: make sure a roscore is not running (or something else at this address)
@@ -32,7 +39,7 @@ describe('Protocol Test', () => {
         callback(null, resp);
       });
 
-      return rosnodejs.initNode(nodeName, {rosMasterUri: `http://localhost:${MASTER_PORT}`});
+      return rosnodejs.initNode(nodeName, {rosMasterUri: `http://localhost:${MASTER_PORT}`, logging: {skipRosLogging: true}});
     });
 
     afterEach(() => {
@@ -337,6 +344,8 @@ describe('Protocol Test', () => {
       const nh = rosnodejs.nh;
       const sub = nh.subscribe(topic, 'std_msgs/String');
 
+      // NOTE: you'll see an error logged here - THAT'S OK
+      // WE'RE EXPECTING AN ERROR TO LOG
       const logCapture = {
         write(rec) {
           if (rec.level === rosnodejs.log.levelFromName['error'] &&
@@ -385,7 +394,9 @@ describe('Protocol Test', () => {
       });
     });
 
-    it('Throttle Pub', (done) => {
+    it('Throttle Pub', function(done) {
+      this.slow(1000);
+
       const nh = rosnodejs.nh;
       const valsToSend = [1,2,3,4,5,6,7,8,9,10];
       const pub = nh.advertise(topic, msgType, { queueSize: 1, throttleMs: 100});
@@ -415,7 +426,7 @@ describe('Protocol Test', () => {
         expect(pub.getNumSubscribers()).to.equal(1);
         expect(sub.getNumPublishers()).to.equal(1);
 
-        pub.disconnect();
+        pub.shutdown();
 
         expect(pub.getNumSubscribers()).to.equal(0);
         sub.on('disconnect', () => {
@@ -434,7 +445,7 @@ describe('Protocol Test', () => {
         expect(pub.getNumSubscribers()).to.equal(1);
         expect(sub.getNumPublishers()).to.equal(1);
 
-        sub.disconnect();
+        sub.shutdown();
 
         expect(sub.getNumPublishers()).to.equal(0);
         pub.on('disconnect', () => {
@@ -444,6 +455,111 @@ describe('Protocol Test', () => {
       });
 
       pub.on('connection', () => { pub.publish({data: 1}); });
+    });
+
+    it('Shutdown Subscriber During Registration', function(done) {
+      this.slow(1600);
+      const nh = rosnodejs.nh;
+      const sub = nh.subscribe(topic, msgType);
+
+      sub.on('registered', () => {
+        throwNext('Subscriber should never have registered!');
+      });
+
+      sub.shutdown();
+
+      // if we haven't seen the 'registered' event by now we should be good
+      setTimeout(done, 500);
+    });
+
+    it('Shutdown Subscriber Requesting Topic', function(done) {
+      this.slow(1600);
+      const nh = rosnodejs.nh;
+      const pub = nh.advertise(topic, msgType);
+
+      pub.on('registered', () => {
+        const sub = nh.subscribe(topic, msgType);
+        sub.on('registered', () => {
+          sub.shutdown();
+        });
+        sub.on('connection', () => {
+          throwNext('Sub should not have gotten connection');
+        })
+      });
+
+      // if we haven't seen thrown by now we should be good
+      setTimeout(done, 500);
+    });
+
+    it('Shutdown Subscriber Connecting to Publisher', function(done) {
+      this.slow(1600);
+      const nh = rosnodejs.nh;
+      // manually construct a subscriber...
+      const sub = new Subscriber({
+        topic,
+        type: 'std_msgs/String',
+        typeClass: rosnodejs.require('std_msgs').msg.String
+      },nh._node);
+
+      const SOCKET_CONNECT_CACHED = net.Socket.prototype.connect;
+      const SOCKET_END_CACHED = net.Socket.prototype.end;
+
+      sub.on('registered', () => {
+
+        net.Socket.prototype.connect = function(port, address, callback) {
+          process.nextTick(() => {
+            callback();
+          });
+        };
+
+        net.Socket.prototype.end = function() {
+          process.nextTick(() => {
+            net.Socket.prototype.connect = SOCKET_CONNECT_CACHED;
+            net.Socket.prototype.end = SOCKET_END_CACHED;
+
+            done();
+          });
+
+          // even though we didn't actually connect, this socket seems to make
+          // the suite hang unless we call the actual Socket.prototype.end()
+          SOCKET_END_CACHED.call(this);
+        };
+
+        sub._handleTopicRequestResponse([1, 'ok', ['TCPROS', 'junk_address', 1234]], 'http://junk_address:1234');
+        sub.shutdown();
+      });
+    });
+
+    it('Shutdown Publisher During Registration', function(done) {
+      this.slow(1600);
+      const nh = rosnodejs.nh;
+      const pub = nh.advertise(topic, msgType);
+
+      pub.on('registered', () => {
+        throwNext('Publisher should never have registered!');
+      });
+
+      pub.shutdown();
+
+      // if we haven't seen the 'registered' event by now we should be good
+      setTimeout(done, 500);
+    });
+
+    it('Shutdown Publisher With Queued Message', function(done) {
+      this.slow(1600);
+      const nh = rosnodejs.nh;
+      const sub = nh.subscribe(topic, msgType, () => {
+        throwNext('Subscriber should never have gotten messages!');
+      });
+      let pub = nh.advertise(topic, msgType);
+
+      pub.on('connected', () => {
+        pub.publish({data: 1});
+        pub.shutdown();
+      });
+
+      // if we haven't received a message by now we should be good
+      setTimeout(done, 500);
     });
   });
 
@@ -467,7 +583,7 @@ describe('Protocol Test', () => {
       });
 
       masterStub.on('unregisterService', (err, params, callback) => {
-        const resp = [1, 'You did it!', subInfo ? 1 : 0];
+        const resp = [1, 'You did it!', serviceInfo ? 1 : 0];
         callback(null, resp);
         serviceInfo = null;
       });
@@ -513,7 +629,7 @@ describe('Protocol Test', () => {
         done();
       })
       .catch((err) => {
-        throw err;
+        throwNext(err);
       })
     });
 
@@ -529,7 +645,7 @@ describe('Protocol Test', () => {
         return client.call({});
       })
       .then(() => {
-        console.error('Service call succeeded when it shouldn\'t have');
+        throwNext('Service call succeeded when it shouldn\'t have');
       })
       .catch((err) => {
         if (err.code === 'E_ROSSERVICEFAILED') {
@@ -539,6 +655,51 @@ describe('Protocol Test', () => {
           console.error('Service call failed with unexpected error');
         }
       });
+    });
+
+    it('Service Shutdown While Registering', function (done) {
+      this.slow(1600);
+
+      const nh = rosnodejs.nh;
+      const serv = nh.advertiseService(service, srvType, (req, resp) => {
+        return true;
+      });
+
+      // hook into registered event - this should not fire
+      serv.on('registered', () => {
+        throw new Error('Service should never have registered!');
+      });
+
+      // kill the service while the asynchronous registration is happening
+      serv.shutdown();
+
+      // if we haven't seen the 'registered' event by now we should be good
+      setTimeout(done, 500);
+    });
+
+    it('Service Shutdown During Call', function(done) {
+      this.slow(1600);
+
+      const nh = rosnodejs.nh;
+      const serv = nh.advertiseService(service, srvType, (req, resp) => {
+        throw new Error('Service callback should never have been called!');
+      });
+
+      let connected = false;
+      serv.on('connection', () => {
+        // we've received the client header but not the request - SHUT IT DOWN
+        connected = true;
+        serv.shutdown();
+      });
+
+      const client = nh.serviceClient(service, srvType);
+      nh.waitForService(service)
+      .then(() => {
+        client.call({});
+      });
+
+      // if the service callback hasn't been called by now we should be good
+      setTimeout(done, 500);
     });
 
     it('Service Unregistered During Call', (done) => {
