@@ -333,6 +333,58 @@ describe('Protocol Test', () => {
       });
     });
 
+    it('Invalid Without Resolve Causes Error', (done) => {
+      const nh = rosnodejs.nh;
+      const sub = nh.subscribe(topic, 'std_msgs/String');
+
+      const logCapture = {
+        write(rec) {
+          if (rec.level === rosnodejs.log.levelFromName['error'] &&
+              rec.msg.startsWith('Error when publishing'))
+          {
+            done();
+          }
+        }
+      };
+
+      rosnodejs.log.addStream({
+        type: 'raw',
+        name: 'testCapture',
+        stream: logCapture,
+        level: 'error'
+      });
+
+      Promise.resolve()
+      .then(() => {
+        sub.on('registered', () => {
+          const pub = nh.advertise(topic, 'std_msgs/String', {latching: true});
+
+          pub.on('connection', () => {
+            pub.publish({});
+          });
+        });
+      })
+      .catch((err) => {
+        console.log(err);
+        done();
+      })
+    });
+
+    it('Resolve', (done) => {
+      const nh = rosnodejs.nh;
+      const sub = nh.subscribe(topic, 'std_msgs/String', (data) => {
+        done();
+      });
+
+      sub.on('registered', () => {
+        const pub = nh.advertise(topic, 'std_msgs/String', { latching: true, resolve: true });
+
+        pub.on('registered', () => {
+          pub.publish({});
+        });
+      });
+    });
+
     it('Throttle Pub', (done) => {
       const nh = rosnodejs.nh;
       const valsToSend = [1,2,3,4,5,6,7,8,9,10];

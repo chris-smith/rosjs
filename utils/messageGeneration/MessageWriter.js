@@ -17,6 +17,7 @@ module.exports = {
     writeRosDatatype(w, msgSpec);
     writeMd5sum(w, msgSpec);
     writeMessageDefinition(w, msgSpec);
+    writeResolve(w, msgSpec);
     w.dedent('}').newline();
     writeConstants(w, msgSpec);
     w.write(`module.exports = ${msgSpec.messageName}`);
@@ -137,6 +138,15 @@ function writeRequires(w, spec, isSrv, previousPackages=null, previousDeps=null)
   return {localDeps, foundPackages};
 }
 
+function getMessagePathFromField(field, packageName) {
+  const [fieldPackage, fieldMsg] = field.baseType.split('/');
+  if (fieldPackage === packageName) {
+    return util.format('%s', fieldMsg);
+  }
+  // else
+  return util.format('%s.msg.%s', fieldPackage, fieldMsg);
+}
+
 function getDefaultValue(field, packageName) {
   if (field.isArray) {
     if (!field.arrayLen) {
@@ -163,12 +173,7 @@ function getDefaultValue(field, packageName) {
     return '0';
   }
   // else
-  let fieldInfo = field.baseType.split('/');
-  if (fieldInfo[0] === packageName) {
-    return util.format('new %s()', fieldInfo[1]);
-  }
-  // else
-  return util.format('new %s.msg.%s()',fieldInfo[0], fieldInfo[1]);
+  return `new ${getMessagePathFromField(field, packageName)}()`;
 }
 
 function writeMsgConstructorField(w, spec, field) {
@@ -199,6 +204,63 @@ function writeClass(w, spec) {
   w.dedent('}')
     .dedent('}')
     .newline();
+}
+
+function writeResolve(w, spec) {
+  // this borrows a lot from the constructor but I'm worried about passing in
+  // a second argument to the constructor (e.g. constructor(json, forceResolve)) and
+  // then in the future we're hosed if we want to accept in-order arguments
+  w.write('static Resolve(msg) {')
+    .indent('// deep-construct a valid message object instance of whatever was passed in')
+    .write('if (typeof msg !== \'object\' || msg === null) {')
+    .indent('msg = {};')
+    .dedent('}')
+    .write(`const resolved = new ${spec.messageName}(null);`);
+  spec.fields.forEach((field) => {
+    if (!field.isBuiltin) {
+      w.write(`if (msg.${field.name} !== undefined) {`)
+        .indent();
+      if (field.isArray) {
+        if (field.arrayLen === null) {
+          w.write(`resolved.${field.name} = new Array(msg.${field.name}.length);`)
+            .write(`for (let i = 0; i < resolved.${field.name}.length; ++i) {`)
+            .indent(`resolved.${field.name}[i] = ${getMessagePathFromField(field, spec.packageName)}.Resolve(msg.${field.name}[i]);`)
+            .dedent('}')
+        }
+        else {
+          w.write(`resolved.${field.name} = new Array(${field.arrayLen});`)
+            .write(`for (let i = 0; i < resolved.${field.name}.length; ++i) {`)
+            .indent(`if (msg.${field.name}.length > i) {`)
+            .indent(`resolved.${field.name}[i] = ${getMessagePathFromField(field, spec.packageName)}.Resolve(msg.${field.name}[i]);`)
+            .dedent('}')
+            .write('else {')
+            .indent(`resolved.${field.name}[i] = new ${getMessagePathFromField(field, spec.packageName)}();`)
+            .dedent('}')
+            .dedent('}');
+        }
+      }
+      else {
+        w.write(`resolved.${field.name} = ${getMessagePathFromField(field, spec.packageName)}.Resolve(msg.${field.name});`);
+      }
+
+      w.dedent('}')
+        .write('else {') // msg.fieldName === undefined
+        .indent(`resolved.${field.name} = ${getDefaultValue(field, spec.packageName)};`)
+        .dedent('}')
+    }
+    else {
+      w.write(`if (msg.${field.name} !== undefined) {`)
+        .indent(`resolved.${field.name} = msg.${field.name};`)
+        .dedent('}')
+        .write('else {')
+        .indent(`resolved.${field.name} = ${getDefaultValue(field, spec.packageName)};`)
+        .dedent('}');
+    }
+
+    w.newline();
+  });
+  w.write('return resolved;')
+   .dedent('}');
 }
 
 function writeSerializeLength(w, name) {
@@ -551,6 +613,7 @@ function writeServiceComponent(w, spec) {
   writeRosDatatype(w, spec);
   writeMd5sum(w, spec);
   writeMessageDefinition(w, spec);
+  writeResolve(w, spec);
   w.dedent('}').newline();
   writeConstants(w, spec);
   w.dividingLine();

@@ -702,4 +702,205 @@ describe('gennodejsTests', () => {
       expect(msgUtils.getHandlerForMsgType('test_msgs/TestActionGoal')).to.not.throw;
     });
   });
+
+  describe('Message Resolving', () => {
+    // Test partially filling in a message and then being able to serialize it
+
+    const test_msgs = msgUtils.getPackage('test_msgs');
+    const Header = msgUtils.getHandlerForMsgType('std_msgs/Header');
+    const BaseType = test_msgs.msg.BaseType;
+    const StdMsg = test_msgs.msg.StdMsg;
+
+    // just assuming this will be enough
+    const buf = Buffer.alloc(500);
+
+    it('Base Type', () => {
+      let msg = {num_field: 1001};
+      let fullMsg = BaseType.Resolve(msg);
+
+      expect(fullMsg.string_field).to.equal('');
+      expect(fullMsg.num_field).to.equal(1001);
+
+      expect(() => BaseType.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => BaseType.serialize(fullMsg, buf, 0)).to.not.throw;
+
+      msg = {num_field: undefined};
+      fullMsg = BaseType.Resolve(msg);
+
+      expect(fullMsg.string_field).to.equal('');
+      expect(fullMsg.num_field).to.equal(0);
+
+      expect(() => BaseType.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => BaseType.serialize(fullMsg, buf, 0)).to.not.throw;
+
+      msg = undefined;
+      fullMsg = BaseType.Resolve(msg);
+
+      expect(fullMsg.string_field).to.equal('');
+      expect(fullMsg.num_field).to.equal(0);
+
+      expect(() => BaseType.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => BaseType.serialize(fullMsg, buf, 0)).to.not.throw;
+
+      fullMsg = BaseType.Resolve(null);
+
+      expect(fullMsg.string_field).to.equal('');
+      expect(fullMsg.num_field).to.equal(0);
+
+      expect(() => BaseType.serialize(fullMsg, buf, 0)).to.not.throw;
+
+      fullMsg = BaseType.Resolve('hi');
+
+      expect(fullMsg.string_field).to.equal('');
+      expect(fullMsg.num_field).to.equal(0);
+
+      expect(() => BaseType.serialize(fullMsg, buf, 0)).to.not.throw;
+
+      fullMsg = BaseType.Resolve(false);
+
+      expect(fullMsg.string_field).to.equal('');
+      expect(fullMsg.num_field).to.equal(0);
+
+      expect(() => BaseType.serialize(fullMsg, buf, 0)).to.not.throw;
+
+      fullMsg = BaseType.Resolve(true);
+
+      expect(fullMsg.string_field).to.equal('');
+      expect(fullMsg.num_field).to.equal(0);
+
+      expect(() => BaseType.serialize(fullMsg, buf, 0)).to.not.throw;
+
+      fullMsg = BaseType.Resolve(1);
+
+      expect(fullMsg.string_field).to.equal('');
+      expect(fullMsg.num_field).to.equal(0);
+
+      expect(() => BaseType.serialize(fullMsg, buf, 0)).to.not.throw;
+    });
+
+    it('Nested Type', () => {
+      let msg = {header: {seq: 102}};
+      let fullMsg = StdMsg.Resolve(msg);
+
+      expect(fullMsg.header instanceof Header).to.be.true;
+      expect(() => StdMsg.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => StdMsg.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+
+      msg = {header: undefined};
+      fullMsg = StdMsg.Resolve(msg);
+
+      expect(fullMsg.header instanceof Header).to.be.true;
+      expect(() => StdMsg.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => StdMsg.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+
+      msg = undefined;
+      fullMsg = StdMsg.Resolve(msg);
+
+      expect(fullMsg.header instanceof Header).to.be.true;
+      expect(() => StdMsg.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => StdMsg.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+    });
+
+    it('Simple Constant Length Array', () => {
+      const ConstantLengthArray = test_msgs.msg.ConstantLengthArray;
+
+      let msg = {array_field: [1,2]};
+      let fullMsg = ConstantLengthArray.Resolve(msg);
+
+      expect(() => ConstantLengthArray.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => ConstantLengthArray.serialize(fullMsg, buf, 0)).to.throw(Error);
+
+      msg = {array_field: undefined};
+      fullMsg = ConstantLengthArray.Resolve(msg);
+
+      expect(() => ConstantLengthArray.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => ConstantLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+
+      msg = undefined;
+      fullMsg = ConstantLengthArray.Resolve(msg);
+
+      expect(() => ConstantLengthArray.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => ConstantLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+    });
+
+    it('Simple Variable Length Array', () => {
+      const VariableLengthArray = test_msgs.msg.VariableLengthArray;
+
+      let msg = {};
+      let fullMsg = VariableLengthArray.Resolve(msg);
+
+      expect(() => VariableLengthArray.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => VariableLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+
+      msg = {array_field: undefined};
+      fullMsg = VariableLengthArray.Resolve(msg);
+
+      expect(() => VariableLengthArray.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => VariableLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+
+      msg = {array_field: [1,2]};
+      fullMsg = VariableLengthArray.Resolve(msg);
+
+      expect(() => VariableLengthArray.serialize(msg, buf, 0)).to.not.throw(Error);
+      expect(() => VariableLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+    });
+
+    it('Complex Constant Length Array', () => {
+      const ConstantLengthArray = test_msgs.msg.BaseTypeConstantLengthArray;
+
+      // BaseTypeConstantLengthArray has an array_field field of length 5
+
+      let msg = {array_field: [new BaseType(), 2]};
+      let fullMsg = ConstantLengthArray.Resolve(msg);
+
+      expect(() => ConstantLengthArray.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => ConstantLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+
+      msg = {array_field: undefined};
+      fullMsg = ConstantLengthArray.Resolve(msg);
+
+      expect(() => ConstantLengthArray.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => ConstantLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+
+      msg = {array_field: [new BaseType(), 2, 5, 10, 12, 15, 20]};
+      fullMsg = ConstantLengthArray.Resolve(msg);
+
+      expect(() => ConstantLengthArray.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => ConstantLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+
+      msg = 'hi';
+      fullMsg = ConstantLengthArray.Resolve(msg);
+
+      expect(() => ConstantLengthArray.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => ConstantLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+    });
+
+    it('Complex Variable Length Array', () => {
+      const VariableLengthArray = test_msgs.msg.BaseTypeVariableLengthArray;
+
+      let msg = {};
+      let fullMsg = VariableLengthArray.Resolve(msg);
+
+      expect(() => VariableLengthArray.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => VariableLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+
+      msg = {array_field: undefined};
+      fullMsg = VariableLengthArray.Resolve(msg);
+
+      expect(() => VariableLengthArray.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => VariableLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+
+      msg = {array_field: [1,2]};
+      fullMsg = VariableLengthArray.Resolve(msg);
+
+      expect(() => VariableLengthArray.serialize(msg, buf, 0)).to.throw(Error);
+      expect(() => VariableLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+
+      msg = {array_field: []};
+      fullMsg = VariableLengthArray.Resolve(msg);
+
+      expect(() => VariableLengthArray.serialize(msg, buf, 0)).to.not.throw(Error);
+      expect(() => VariableLengthArray.serialize(fullMsg, buf, 0)).to.not.throw(Error);
+    });
+  });
 });

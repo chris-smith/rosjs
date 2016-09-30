@@ -139,7 +139,7 @@ class GlobalSpinner extends events {
   _queueMessage(clientId, message) {
     const clientQueue = this._clientQueueMap.get(clientId);
     if (!clientQueue) {
-      throw new Error('Unable to queue message for unknown client');
+      throw new Error(`Unable to queue message for unknown client ${clientId}`);
     }
     // else
     if (clientQueue.length === 0) {
