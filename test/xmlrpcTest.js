@@ -32,7 +32,7 @@ describe('Protocol Test', () => {
         callback(null, resp);
       });
 
-      return rosnodejs.initNode(nodeName, {rosMasterUri: `http://localhost:MASTER_PORT`});
+      return rosnodejs.initNode(nodeName, {rosMasterUri: `http://localhost:${MASTER_PORT}`});
     });
 
     afterEach(() => {
@@ -478,7 +478,8 @@ describe('Protocol Test', () => {
           callback(null, resp);
         }
         else {
-          callback(new Error("Missing!"), null);
+          const resp = [-1, "no provider", ""];
+          callback(null, resp);
         }
       });
 

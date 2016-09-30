@@ -16,8 +16,16 @@ class XmlrpcCall {
   call(client) {
     return new Promise((resolve, reject) => {
       client.methodCall(this.method, this.data, (err, resp) => {
-        if (err || resp[0] !== 1) {
-          reject(err, resp);
+        if (err) {
+          reject(err);
+        }
+        else if (resp[0] !== 1) {
+          const error = new Error('ROS XMLRPC Error');
+          error.code = 'EROSAPIERROR';
+          error.statusCode = resp[0];
+          error.statusMessage = resp[1];
+          error.value = resp[2];
+          reject(error);
         }
         else {
           resolve(resp);
@@ -73,9 +81,9 @@ class XmlrpcClient extends EventEmitter {
       this._resetTimeout();
       call.resolve(resp);
     })
-    .catch((err, resp) => {
-      this._log.info('Call %s %j failed! %j, %j', call.method, call.data, err, resp);
-      if (err && err.code === CONNECTION_REFUSED) {
+    .catch((err) => {
+      this._log.info('Call %s %j failed! %s', call.method, call.data, err);
+      if (err instanceof Error && err.code === CONNECTION_REFUSED) {
         // Call failed to connect - try to connect again.
         // All future calls would have same error since they're
         // directed at the same xmlrpc server.
@@ -86,7 +94,7 @@ class XmlrpcClient extends EventEmitter {
         // call failed - move on.
         this._shiftQueue();
         this._resetTimeout();
-        call.reject(err, resp);
+        call.reject(err);
       }
     })
     .then(() => {
