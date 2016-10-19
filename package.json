@@ -1,6 +1,6 @@
 {
   "name": "rosnodejs",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Native ROS for nodejs",
   "main": "index.js",
   "keywords": [
@@ -31,6 +31,6 @@
     "moment": "2.12.0",
     "ros_msg_utils": "RethinkRobotics-opensource/ros_msg_utils#v1.0.1",
     "walker": "1.0.7",
-    "xmlrpc": "chfritz/node-xmlrpc"
+    "xmlrpc": "RethinkRobotics-opensource/node-xmlrpc#v1.3.4"
   }
 }
