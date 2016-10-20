@@ -7,6 +7,7 @@ const log = LoggingManager.getLogger('ros.spinner');
 
 const PING_OP = 'ping';
 const DELETE_OP = 'delete';
+const ADD_OP = 'add';
 
 /**
  * @class ClientQueue
@@ -98,7 +99,10 @@ class GlobalSpinner extends events {
   }
 
   addClient(client, clientId, queueSize, throttleMs) {
-    if (queueSize > 0) {
+    if (this._queueLocked) {
+      this._lockedOpCache.push({op: ADD_OP, client, clientId, queueSize, throttleMs});
+    }
+    else if (queueSize > 0) {
       this._clientQueueMap.set(clientId, new ClientQueue(client, queueSize, throttleMs));
     }
   }
@@ -152,12 +156,15 @@ class GlobalSpinner extends events {
   _handleLockedOpCache() {
     const len = this._lockedOpCache.length;
     for (let i = 0; i < len; ++i) {
-      const {op, clientId, msg} = this._lockedOpCache[i];
+      const {op, clientId, msg, client, queueSize, throttleMs} = this._lockedOpCache[i];
       if (op === PING_OP) {
         this.ping(clientId, msg);
       }
       else if (op === DELETE_OP) {
         this.disconnect(clientId);
+      }
+      else if (op === ADD_OP) {
+        this.addClient(client, clientId, queueSize, throttleMs);
       }
     }
     this._lockedOpCache = [];
