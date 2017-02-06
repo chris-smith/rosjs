@@ -9,8 +9,6 @@ const fieldsUtil = require('./fields');
 const IndentedWriter = require('./IndentedWriter.js');
 const MsgSpec = require('./MessageSpec.js');
 
-const Field = fieldsUtil.Field;
-
 let packageCache = null;
 
 const PKG_LOADING = 'loading';
