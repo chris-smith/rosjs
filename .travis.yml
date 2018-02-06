@@ -54,6 +54,7 @@ install:
   - git clone https://github.com/ros/std_msgs.git src/std_msgs
   - git clone https://github.com/ros/common_msgs src/common_msgs
   - git clone https://github.com/RethinkRobotics-opensource/test_msgs.git src/test_msgs
+  - git clone https://github.com/ros/ros_comm_msgs.git src/ros_comm_msgs
   # Install all dependencies, using wstool first and rosdep second.
   # wstool looks for a ROSINSTALL_FILE defined in the environment variables.
   - cd ~/catkin_ws/src
