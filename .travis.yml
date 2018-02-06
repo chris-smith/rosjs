@@ -1,7 +1,5 @@
 dist: trusty
 sudo: required
-services:
-  - docker
 compiler:
   - gcc
 language: node_js
@@ -45,13 +43,8 @@ install:
   - cd ~/catkin_ws  
   - catkin_make
   - source devel/setup.bash
-  # Add the package under integration to the workspace using a symlink.
-#  - cd ~/catkin_ws/src
-#  - ln -s $CI_SOURCE_PATH .
   
-# Install all dependencies, using wstool first and rosdep second.
-# wstool looks for a ROSINSTALL_FILE defined in the environment variables.
-#before_script:
+  # Install required message packages
   - git clone https://github.com/ros/std_msgs.git src/std_msgs
   - git clone https://github.com/ros/common_msgs src/common_msgs
   - git clone https://github.com/RethinkRobotics-opensource/test_msgs.git src/test_msgs
