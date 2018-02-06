@@ -44,7 +44,7 @@ install:
   - cd ~/catkin_ws
   - git clone https://github.com/ros/std_msgs.git src/std_msgs
   - git clone https://github.com/ros/common_msgs src/common_msgs
-  - git clone git@github.com:RethinkRobotics-opensource/test_msgs.git src/test_msgs
+  - git clone https://github.com/RethinkRobotics-opensource/test_msgs.git src/test_msgs
   - catkin_make
   - source devel/setup.bash
   # Add the package under integration to the workspace using a symlink.
