@@ -41,20 +41,21 @@ install:
   - catkin_init_workspace
   # Create the devel/setup.bash (run catkin_make with an empty workspace) and
   # source it to set the path variables.
-  - cd ~/catkin_ws
-  - git clone https://github.com/ros/std_msgs.git src/std_msgs
-  - git clone https://github.com/ros/common_msgs src/common_msgs
-  - git clone https://github.com/RethinkRobotics-opensource/test_msgs.git src/test_msgs
+  - cd ~/catkin_ws  
   - catkin_make
   - source devel/setup.bash
   # Add the package under integration to the workspace using a symlink.
-  - cd ~/catkin_ws/src
-  - ln -s $CI_SOURCE_PATH .
+#  - cd ~/catkin_ws/src
+#  - ln -s $CI_SOURCE_PATH .
   
 # Install all dependencies, using wstool first and rosdep second.
 # wstool looks for a ROSINSTALL_FILE defined in the environment variables.
-before_script:
-  # source dependencies: install using wstool.
+#before_script:
+  - git clone https://github.com/ros/std_msgs.git src/std_msgs
+  - git clone https://github.com/ros/common_msgs src/common_msgs
+  - git clone https://github.com/RethinkRobotics-opensource/test_msgs.git src/test_msgs
+  # Install all dependencies, using wstool first and rosdep second.
+  # wstool looks for a ROSINSTALL_FILE defined in the environment variables.
   - cd ~/catkin_ws/src
   - wstool init
   - if [[ -f $ROSINSTALL_FILE ]] ; then wstool merge $ROSINSTALL_FILE ; fi
