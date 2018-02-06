@@ -64,6 +64,8 @@ install:
   - cd ~/catkin_ws
   - rosdep install -y --from-paths src --ignore-src --rosdistro $ROS_DISTRO
   - env | grep ROS_
+  - source devel/setup.bash
+  - env | grep ROS_
 
 script:
   - cd $CI_SOURCE_PATH
