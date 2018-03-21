@@ -25,7 +25,8 @@ describe('Protocol Test', () => {
   let masterStub;
   const initArgs = {
     rosMasterUri: `http://localhost:${MASTER_PORT}`,
-    logging: {skipRosLogging: true}
+    logging: {skipRosLogging: true},
+    notime: true
   };
   const nodeName = '/testNode';
 
@@ -811,6 +812,25 @@ describe('Protocol Test', () => {
       })
     });
 
+    it('Asynchronous Call and Response', (done) => {
+      const nh = rosnodejs.nh;
+      const serv = nh.advertiseService(service, srvType, (req, resp) => {
+        return Promise.resolve(true);
+      });
+
+      const client = nh.serviceClient(service, srvType);
+      nh.waitForService(service)
+      .then(() => {
+        return client.call({});
+      })
+      .then(() => {
+        done();
+      })
+      .catch((err) => {
+        throwNext(err);
+      })
+    });
+
     it('Service Failure', (done) => {
       const nh = rosnodejs.nh;
       const serv = nh.advertiseService(service, srvType, (req, resp) => {
@@ -878,6 +898,52 @@ describe('Protocol Test', () => {
 
       // if the service callback hasn't been called by now we should be good
       setTimeout(done, 500);
+    });
+
+    it('Service Shutdown Handling Call', function(done) {
+      this.slow(1600);
+
+      const nh = rosnodejs.nh;
+      const serv = nh.advertiseService(service, srvType, (req, resp) => {
+        serv.shutdown();
+
+        return true;
+      });
+
+      const client = nh.serviceClient(service, srvType);
+      nh.waitForService(service)
+      .then(() => {
+        return client.call({});
+      })
+      .catch((err) => {
+        expect(err.message).to.equal('Connection was closed');
+        done();
+      });
+    });
+
+    it('Service Shutdown Handling Asynchronous Call', function(done) {
+      this.slow(1600);
+
+      const nh = rosnodejs.nh;
+      const serv = nh.advertiseService(service, srvType, (req, resp) => {
+
+        return new Promise((resolve) => {
+          setTimeout(() => {
+            serv.shutdown();
+            resolve(true);
+          }, 0);
+        });
+      });
+
+      const client = nh.serviceClient(service, srvType);
+      nh.waitForService(service)
+      .then(() => {
+        return client.call({});
+      })
+      .catch((err) => {
+        expect(err.message).to.equal('Connection was closed');
+        done();
+      });
     });
 
     it('Service Unregistered During Call', (done) => {
@@ -1027,6 +1093,116 @@ describe('Protocol Test', () => {
 
       rosnodejs.on('shutdown', () => {
         gotEvent = true;
+      });
+    });
+  });
+
+  describe('Parameters', function() {
+    let masterStub;
+
+    before((done) => {
+      masterStub = new MasterStub('localhost', MASTER_PORT);
+      masterStub.provideAll();
+
+      return rosnodejs.shutdown()
+      .then(() => {
+        rosnodejs.reset();
+        return rosnodejs.initNode(nodeName, initArgs);
+      })
+      .then(() => done());
+    });
+
+    after((done) => {
+      masterStub.shutdown();
+      return rosnodejs.shutdown()
+      .then(() => {
+        rosnodejs.reset();
+        done();
+      });
+    });
+
+    it('Set', function(done) {
+      const nh = rosnodejs.nh;
+
+      nh.setParam('/key', 2)
+      .then(() => {
+        expect(masterStub._params['/key']).to.equal(2);
+        done();
+      });
+    });
+
+    it('Get', function(done) {
+      const nh = rosnodejs.nh;
+
+      nh.getParam('/key')
+      .then((result) => {
+        expect(result).to.equal(2);
+        expect(masterStub._params['/key']).to.equal(2);
+        done();
+      });
+    });
+
+    it('Has', function(done) {
+      const nh = rosnodejs.nh;
+
+      nh.hasParam('/key')
+      .then((result) => {
+        expect(result).to.be.true;
+        expect(masterStub._params['/key']).to.equal(2);
+        done();
+      });
+    });
+
+    it('Delete', function(done) {
+      const nh = rosnodejs.nh;
+
+      nh.deleteParam('/key')
+      .then(() => {
+        expect(masterStub._params['/key']).to.be.undefined;
+        done();
+      });
+    });
+
+    it('Full', function(done) {
+      const nh = rosnodejs.nh;
+
+      nh.getParam('/missing')
+      .then(() => throwNext('Get should reject'))
+      .catch(() => {
+        return nh.hasParam('/missing')
+      })
+      .catch(() => throwNext('Has should resolve'))
+      .then((result) => {
+        expect(result).to.be.false;
+        return nh.setParam('/exists', 1);
+      })
+      .catch(() => throwNext('Set should resolve'))
+      .then(() => {
+        expect(masterStub._params['/exists']).to.equal(1);
+        return nh.hasParam('/exists');
+      })
+      .catch(() => throwNext('Has should resolve'))
+      .then((result) => {
+        expect(result).to.be.true;
+        return nh.getParam('/exists');
+      })
+      .catch(() => throwNext('Get should resolve'))
+      .then((result) => {
+        expect(result).to.equal(1);
+        return nh.deleteParam('/missing');
+      })
+      .then(() => throwNext('Delete should reject'))
+      .catch((err) => {
+        return nh.deleteParam('/exists');
+      })
+      .catch(() => throwNext('Delete should resolve'))
+      .then(() => {
+        return nh.hasParam('/exists');
+      })
+      .catch(() => throwNext('Has should resolve'))
+      .then((result) => {
+        expect(result).to.be.false;
+        done();
       });
     });
   });
