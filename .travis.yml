@@ -22,6 +22,7 @@ env:
 branches:
   only:
     - kinetic-devel
+    - fixTravis
 
 # Install system dependencies, namely a very barebones ROS setup.
 before_install:
